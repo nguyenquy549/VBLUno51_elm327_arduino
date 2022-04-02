@@ -1,0 +1,7 @@
+{
+    "port": "/dev/ttyACM0",
+    "board": "VNGIoTLab:nRF51822:nRF51822_VBLUNO51",
+    "programmer": "VNGIoTLab:nrfutil",
+    "sketch": "VBLUno51_elm327_arduino.ino",
+    "output": "./build"
+}
