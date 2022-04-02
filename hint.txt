@@ -1,0 +1,1 @@
+run with dummy device "BLE_Peripheral" example.

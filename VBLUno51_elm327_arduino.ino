@@ -22,19 +22,13 @@
 
 BLE ble;
 
-static uint8_t service1_uuid[] = {0x71, 0x3D, 0, 0, 0x50, 0x3E, 0x4C, 0x75, 0xBA, 0x94, 0x31, 0x48, 0xF1, 0x8D, 0x94, 0x1E};
-static uint8_t service1_chars1[] = {0x71, 0x3D, 0, 2, 0x50, 0x3E, 0x4C, 0x75, 0xBA, 0x94, 0x31, 0x48, 0xF1, 0x8D, 0x94, 0x1E};
-static uint8_t service1_chars2[] = {0x71, 0x3D, 0, 3, 0x50, 0x3E, 0x4C, 0x75, 0xBA, 0x94, 0x31, 0x48, 0xF1, 0x8D, 0x94, 0x1E};
-static uint8_t service1_chars3[] = {0x71, 0x3D, 0, 4, 0x50, 0x3E, 0x4C, 0x75, 0xBA, 0x94, 0x31, 0x48, 0xF1, 0x8D, 0x94, 0x1E};
+static const uint8_t service1_uuid[] = {0x6A, 0x4E, 0x24, 0x01, 0x66, 0x7B, 0x11, 0xE3, 0x94, 0x9A, 0x08, 0x00, 0x20, 0x0C, 0x9A, 0x66};
+static const uint8_t service1_chars1_uuid[] = {0x6A, 0x4E, 0x4C, 0x80, 0x66, 0x7B, 0x11, 0xE3, 0x94, 0x9A, 0x08, 0x00, 0x20, 0x0C, 0x9A, 0x66};
+static const uint8_t service1_chars3_uuid[] = {0x6A, 0x4E, 0xCD, 0x28, 0x66, 0x7B, 0x11, 0xE3, 0x94, 0x9A, 0x08, 0x00, 0x20, 0x0C, 0x9A, 0x66};
 
-UUID service_uuid(0x180D);
-UUID chars_uuid1(0x2A37);
-UUID chars_uuid2(service1_chars2);
-UUID chars_uuid3(service1_chars3);
-
-static uint8_t device_is_hrm = 0;
-static uint8_t device_is_simple_peripheral = 0;
-static uint8_t device_is_elm327 = 0;
+UUID service_uuid(service1_uuid);
+UUID chars_uuid1(service1_chars1_uuid);
+UUID chars_uuid2(service1_chars3_uuid);
 
 // When found the match characteristic, set 1.
 static uint8_t characteristic_is_fond = 0;
@@ -111,7 +105,8 @@ void startDiscovery(uint16_t handle)
    *
    * @return   BLE_ERROR_NONE if service discovery is launched successfully; else an appropriate error.
    */
-  ble.gattClient().launchServiceDiscovery(handle, discoveredServiceCallBack, discoveredCharacteristicCallBack, service_uuid, chars_uuid1);
+  // ble.gattClient().launchServiceDiscovery(handle, discoveredServiceCallBack, discoveredCharacteristicCallBack, service_uuid, chars_uuid2);
+  ble.gattClient().launchServiceDiscovery(handle, discoveredServiceCallBack, discoveredCharacteristicCallBack);
 }
 
 /**
@@ -150,6 +145,12 @@ static void scanCallBack(const Gap::AdvertisementCallbackParams_t *params)
     Serial.print("Short name is : ");
     Serial.println((const char *)adv_name);
     if (memcmp("Forerunner 935", adv_name, 14) == 0x00)
+    {
+      Serial.println("Got device, stop scan ");
+      ble.stopScan();
+      ble.connect(params->peerAddr, BLEProtocol::AddressType::RANDOM_STATIC, NULL, NULL);
+    }
+    else if (memcmp("BLE_Peripheral", adv_name, 14) == 0x00)
     {
       Serial.println("Got device, stop scan ");
       ble.stopScan();
@@ -206,8 +207,6 @@ void connectionCallBack(const Gap::ConnectionCallbackParams_t *params)
 void disconnectionCallBack(const Gap::DisconnectionCallbackParams_t *params)
 {
   Serial.println("Disconnected, start to scanning");
-  device_is_simple_peripheral = 0;
-  device_is_hrm = 0;
   characteristic_is_fond = 0;
   descriptor_is_found = 0;
   ble.startScan(scanCallBack);
@@ -267,28 +266,23 @@ static void discoveredCharacteristicCallBack(const DiscoveredCharacteristic *cha
   Serial.print("Chars UUID type        : ");
   Serial.println(chars->getUUID().shortOrLong(), HEX); // 0 16bit_uuid, 1 128bit_uuid
   Serial.print("Chars UUID             : ");
-  if (chars->getUUID().shortOrLong() == UUID::UUID_TYPE_SHORT)
-  {
-    Serial.println(chars->getUUID().getShortUUID(), HEX);
-    if (chars->getUUID().getShortUUID() == 0x2A37)
-    {
-      Serial.println("Found HRM characteristic ");
-      characteristic_is_fond = 1;
-      chars_hrm = *chars;
-    }
-  }
-  else
-  {
-    uint8_t index;
-    const uint8_t *uuid = chars->getUUID().getBaseUUID();
-    for (index = 0; index < 16; index++)
-    {
-      Serial.print(uuid[index], HEX);
-      Serial.print(" ");
-    }
-    Serial.println(" ");
-  }
 
+  uint8_t index;
+  const uint8_t *uuid = chars->getUUID().getBaseUUID();
+
+  characteristic_is_fond = 1;
+  chars_hrm = *chars;
+
+  for (index = 0; index < 16; index++)
+  {
+    Serial.print(uuid[index], HEX);
+    Serial.print(" ");
+    if (uuid[index] != service1_chars3_uuid[15 - index]) // compare with service1_chars3_uuid
+    {
+      characteristic_is_fond = 0;
+    }
+  }
+  Serial.println("");
   Serial.print("properties_read        : ");
   Serial.println(chars->getProperties().read(), DEC);
   Serial.print("properties_writeWoResp : ");
@@ -342,6 +336,7 @@ static void discoveredCharsDescriptorCallBack(const CharacteristicDescriptorDisc
     descriptor_is_found = 1;
     desc_of_chars_hrm = params->descriptor;
   }
+
   Serial.print("connectionHandle       : ");
   Serial.println(params->descriptor.getConnectionHandle(), HEX);
   Serial.print("descriptor Handle      : ");
@@ -358,7 +353,7 @@ static void discoveredDescTerminationCallBack(const CharacteristicDescriptorDisc
   Serial.println("\r\n----discovery descriptor Termination");
   if (descriptor_is_found)
   {
-    Serial.println("Open HRM notify");
+    Serial.println("Open elm327 notify");
     uint16_t value = 0x0001;
     ble.gattClient().write(GattClient::GATT_OP_WRITE_REQ, chars_hrm.getConnectionHandle(), desc_of_chars_hrm.getAttributeHandle(), 2, (uint8_t *)&value);
   }
@@ -448,7 +443,7 @@ void setup()
   // timeout : in seconds, between 0x0001 and 0xFFFF, 0x0000 disables timeout
   // activeScanning : true or false
   ble.setScanParams(1000, 200, 0, false);
-  ble.setActiveScan(true);
+  // ble.setActiveScan(true);
   // start scanning
   ble.startScan(scanCallBack);
 }
